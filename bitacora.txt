@@ -1,0 +1,320 @@
+================================================================
+BITÁCORA DE PREPARACIÓN DE INFRAESTRUCTURA
+Proyecto: sistema-educativo
+Repositorio: https://github.com/javiergcd/sistema-educativo
+Desarrollador: javiergcd
+Fecha: 2025
+================================================================
+
+----------------------------------------------------------------
+PASO 1 - INSTALACIÓN DE HERRAMIENTAS BASE
+----------------------------------------------------------------
+Se instalaron las siguientes herramientas en el sistema operativo Windows:
+
+- NVM (Node Version Manager) para gestionar versiones de Node.js
+- Node.js LTS (última versión estable) mediante: nvm install --lts
+- npm (incluido con Node.js)
+- Git descargado desde git-scm.com
+- Docker Desktop desde docker.com
+- VS Code como editor principal
+
+Extensiones instaladas en VS Code:
+- ESLint: estándares de codificación
+- Prettier: formato automático de código
+- SonarQube: revisor de Clean Code
+- Jest: ejecución de pruebas TDD
+- Error Lens: resaltado de errores
+- Git Lens: trazabilidad en git
+- Docker: gestión de contenedores
+
+----------------------------------------------------------------
+PASO 2 - INICIALIZACIÓN DEL PROYECTO Y REPOSITORIO GIT
+----------------------------------------------------------------
+Se creó la carpeta del proyecto y se inicializó git:
+
+  mkdir sistema-educativo
+  cd sistema-educativo
+  git init
+  git remote add origin https://github.com/javiergcd/sistema-educativo.git
+
+Se crearon las ramas principales del proyecto:
+
+  git checkout -b develop
+  git checkout -b main
+
+El desarrollo se realiza sobre la rama develop, siguiendo
+buenas prácticas de integración continua.
+
+----------------------------------------------------------------
+PASO 3 - INSTALACIÓN DE DEPENDENCIAS NODE.JS
+----------------------------------------------------------------
+Se inicializó el proyecto con npm y se instalaron las
+dependencias de desarrollo:
+
+  npm init -y
+  npm install --save-dev eslint prettier eslint-config-prettier
+                         eslint-plugin-prettier husky lint-staged
+  npm install --save-dev jest ts-jest @types/jest
+  npm install --save-dev @eslint/js
+
+----------------------------------------------------------------
+PASO 4 - CONFIGURACIÓN DE PRETTIER
+----------------------------------------------------------------
+Se creó el archivo .prettierrc en la raíz del proyecto
+con la siguiente configuración:
+
+{
+  "printWidth": 90,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "bracketSameLine": false
+}
+
+----------------------------------------------------------------
+PASO 5 - CONFIGURACIÓN DE ESLINT
+----------------------------------------------------------------
+Debido a que se instaló ESLint v10, el formato de configuración
+cambió. ESLint v9+ ya no acepta .eslintrc.json, requiere el
+nuevo formato eslint.config.js (o .mjs).
+
+PROBLEMA ENCONTRADO:
+- ESLint v10 no reconoce el archivo .eslintrc.json
+- Error: "ESLint couldn't find an eslint.config.(js|mjs|cjs) file"
+
+SOLUCIÓN:
+Se creó el archivo eslint.config.mjs (formato ESM) con la
+siguiente configuración adaptada al proyecto:
+
+  import js from '@eslint/js';
+
+  export default [
+    js.configs.recommended,
+    {
+      rules: {
+        'no-console': ['warn', { allow: ['warn', 'error'] }],
+        'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      },
+      languageOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        globals: {
+          describe: 'readonly',
+          it: 'readonly',
+          expect: 'readonly',
+          beforeEach: 'readonly',
+          afterEach: 'readonly',
+          beforeAll: 'readonly',
+          afterAll: 'readonly',
+        },
+      },
+    },
+    {
+      files: ['jest.config.js', '*.config.js'],
+      languageOptions: {
+        sourceType: 'commonjs',
+        globals: {
+          require: 'readonly',
+          module: 'writable',
+          __dirname: 'readonly',
+          __filename: 'readonly',
+        },
+      },
+    },
+    {
+      ignores: ['node_modules/', 'dist/', 'build/', 'coverage/'],
+    },
+  ];
+
+Nota: Se usó extensión .mjs porque el package.json no tiene
+"type": "module", evitando así el error:
+"Cannot use import statement outside a module"
+
+----------------------------------------------------------------
+PASO 6 - CONFIGURACIÓN DE JEST
+----------------------------------------------------------------
+PROBLEMA ENCONTRADO:
+- Al hacer commit, Husky intentaba correr "npm test" pero
+  Jest no estaba instalado.
+- Error: "'jest' is not recognized as an internal or external command"
+
+SOLUCIÓN:
+Se instaló Jest y se inicializó su configuración:
+
+  npm install --save-dev jest ts-jest @types/jest
+  npx ts-jest config:init
+
+Se agregó el flag --passWithNoTests en package.json para
+evitar que Jest falle cuando aún no hay tests reales:
+
+  "test": "jest --passWithNoTests"
+
+Se creó un test placeholder en .husky/src/__tests__/app.test.js:
+
+  describe('Setup', () => {
+    it('should pass initial test', () => {
+      expect(true).toBe(true);
+    });
+  });
+
+----------------------------------------------------------------
+PASO 7 - CONFIGURACIÓN DE HUSKY
+----------------------------------------------------------------
+Se instaló y configuró Husky para los hooks de git:
+
+  npx husky-init && npm install
+
+Se editó .husky/pre-commit, última línea:
+  npx lint-staged --config .lintstagedrc.json
+
+Se agregó hook pre-push para bloquear si los tests fallan:
+  npx husky add .husky/pre-push "npm test"
+
+----------------------------------------------------------------
+PASO 8 - CONFIGURACIÓN DE LINT-STAGED
+----------------------------------------------------------------
+PROBLEMA ENCONTRADO:
+- lint-staged escaneaba dentro de node_modules y encontraba
+  el package.json de la librería bs-logger con formato
+  obsoleto de configuración (clave "linters" y "git add").
+- Error: "Invalid value for 'linters'"
+
+SOLUCIÓN:
+Se creó el archivo .lintstagedrc.json en la raíz del proyecto
+para forzar a lint-staged a usar solo esta configuración:
+
+  {
+    "*.{js,ts}": ["eslint --fix", "prettier --write"],
+    "*.{json,md,html,css}": ["prettier --write"]
+  }
+
+Se modificó .husky/pre-commit para apuntar explícitamente
+al archivo de configuración:
+
+  npx lint-staged --config .lintstagedrc.json
+
+Se eliminó la sección "lint-staged" del package.json para
+evitar conflicto entre dos fuentes de configuración.
+
+----------------------------------------------------------------
+PASO 9 - CONFIGURACIÓN DE .GITIGNORE
+----------------------------------------------------------------
+PROBLEMA ENCONTRADO:
+- node_modules no estaba siendo ignorado por git, lo que
+  causaba que lint-staged escaneara esa carpeta.
+
+SOLUCIÓN:
+Se creó el archivo .gitignore en la raíz con el siguiente
+contenido principal:
+
+  node_modules/
+  .env
+  dist/
+  build/
+  *.log
+  coverage/
+  .DS_Store
+  Thumbs.db
+
+Se ejecutó el siguiente comando para dejar de trackear
+node_modules que ya estaba siendo seguido por git:
+
+  git rm -r --cached node_modules
+
+----------------------------------------------------------------
+PASO 10 - CONFIGURACIÓN DE GITHUB ACTIONS (CI)
+----------------------------------------------------------------
+Se creó el directorio y archivo de workflow:
+
+  mkdir -p .github/workflows
+  touch .github/workflows/ci.yml
+
+El pipeline CI se ejecuta automáticamente en:
+- Push a las ramas main y develop
+- Pull Request hacia main y develop
+
+Pasos del pipeline configurados:
+  1. Code Checkout
+  2. Setup Node.js (matrix: 18.x y 20.x)
+  3. Clean dependency install (npm ci)
+  4. Security auditing (npm audit)
+  5. Format check (Prettier)
+  6. Lint check (ESLint)
+  7. Type check (TypeScript)
+  8. Run Tests (Jest)
+  9. Build Check
+
+----------------------------------------------------------------
+PASO 11 - ACTUALIZACIÓN DE SCRIPTS EN PACKAGE.JSON
+----------------------------------------------------------------
+Se agregaron los scripts necesarios en package.json:
+
+  "scripts": {
+    "test": "jest --passWithNoTests",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  }
+
+Nota: format:check es requerido por el pipeline de CI.
+
+----------------------------------------------------------------
+PASO 12 - PRIMER COMMIT Y PUSH AL REPOSITORIO
+----------------------------------------------------------------
+PROBLEMA ENCONTRADO:
+- Al intentar hacer push, el repositorio no existía en GitHub.
+- Error: "remote: Repository not found"
+
+SOLUCIÓN:
+Se creó el repositorio vacío en GitHub (sin inicializar con
+README ni .gitignore para evitar conflicto de historiales).
+
+  URL: https://github.com/javiergcd/sistema-educativo
+
+Luego se realizó el primer commit y push exitoso:
+
+  git add .
+  git commit -m "chore: configuracion inicial del proyecto"
+  git push -u origin develop
+
+Archivos incluidos en el commit inicial:
+  - .github/workflows/ci.yml
+  - .gitignore
+  - .husky/pre-commit
+  - .husky/pre-push
+  - .husky/src/__tests__/app.test.js
+  - .lintstagedrc.json
+  - eslint.config.mjs
+  - jest.config.js
+  - package-lock.json
+  - package.json
+
+Se creó y subió también la rama main:
+
+  git checkout -b main
+  git push -u origin main
+  git checkout develop
+
+================================================================
+RESULTADO FINAL
+================================================================
+Infraestructura base configurada y funcionando correctamente:
+
+  [OK] Node.js LTS instalado via NVM
+  [OK] Git configurado con ramas main y develop
+  [OK] ESLint v10 configurado con eslint.config.mjs
+  [OK] Prettier configurado con .prettierrc
+  [OK] Jest instalado con test placeholder
+  [OK] Husky con hooks pre-commit y pre-push
+  [OK] lint-staged con configuración explícita via .lintstagedrc.json
+  [OK] .gitignore con node_modules excluido
+  [OK] GitHub Actions CI pipeline configurado
+  [OK] Repositorio publicado en GitHub
+
+Repositorio GitHub: https://github.com/javiergcd/sistema-educativo
+================================================================
